@@ -35,9 +35,9 @@ func (cfg *apiConfig) resetHandler(w http.ResponseWriter, r *http.Request) {
 // Handler to return the current hit count
 func (cfg *apiConfig) metricsHandler(w http.ResponseWriter, r *http.Request) {
 
-	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(fmt.Sprintf("Hits: %d", cfg.fileserverHits)))
+	w.Write([]byte(fmt.Sprintf("<html><body><h1>Welcome, Chirpy Admin</h1><p>Chirpy has been visited %d times!</p></body></html>", cfg.fileserverHits)))
 }
 
 // Handler to return OK for readiness
@@ -61,7 +61,7 @@ func main() {
 	mux.Handle("/app/", http.StripPrefix("/app/", apiCfg.middlewareMetricsInc(handler)))
 
 	mux.Handle("GET /api/healthz", &readinessHandler{})
-	mux.HandleFunc("/api/metrics", apiCfg.metricsHandler)
+	mux.HandleFunc("GET /admin/metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("/api/reset", apiCfg.resetHandler)
 
 	srv := &http.Server{
