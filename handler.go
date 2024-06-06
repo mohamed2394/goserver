@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 )
 
@@ -26,35 +27,67 @@ func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Decode JSON request body
 		var reqBody ChirpRequest
+		profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
+
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		if err != nil {
-			errorResponse := ErrorResponse{Error: "Something went wrong"}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(errorResponse)
+			respondWithError(w, http.StatusBadRequest, "Something went wrong")
 			return
 		}
 
 		// Check chirp length
 		if len(reqBody.Body) > 140 {
-			errorResponse := ErrorResponse{Error: "Chirp is too long"}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusBadRequest)
-			json.NewEncoder(w).Encode(errorResponse)
+			respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 			return
 		}
 
-		// Call the next handler if validation passes
-		next.ServeHTTP(w, r)
+		// Replace profane words
+		cleanedBody := replaceProfaneWords(reqBody.Body, profaneWords)
+
+		// Send the cleaned chirp body in the response
+		respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
+
+		// No need to call the next handler since we're responding directly
 	}
+}
+
+// Function to replace profane words
+func replaceProfaneWords(text string, profaneWords []string) string {
+	words := strings.Fields(text) // Split the text into words
+	replacement := "****"
+
+	for i, word := range words {
+		// Normalize the word to lowercase for comparison
+		normalizedWord := strings.ToLower(word)
+
+		// Check if the normalized word (stripped of punctuation) is in the profane words list
+		for _, profaneWord := range profaneWords {
+			if normalizedWord == profaneWord {
+				words[i] = replacement // Replace the profane word
+			}
+		}
+	}
+
+	// Reconstruct the text from words
+	return strings.Join(words, " ")
+}
+func respondWithError(w http.ResponseWriter, code int, msg string) {
+	errorResponse := ErrorResponse{Error: msg}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(errorResponse)
+}
+
+func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	json.NewEncoder(w).Encode(payload)
 }
 
 // ValidateChirpHandler is the actual handler for /api/validate_chirp endpoint
 func ValidateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	// Respond with success message if validation passed
-	response := map[string]bool{"valid": true}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+
 }
 
 // Middleware to increment the fileserverHits counter
