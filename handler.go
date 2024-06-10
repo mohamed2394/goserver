@@ -6,19 +6,16 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	. "github.com/mohamed2394/goserver/internal"
 )
 
-// Define the struct to hold state
 type apiConfig struct {
 	mu             sync.Mutex
 	fileserverHits int
 }
 
 type readinessHandler struct{}
-
-type ErrorResponse struct {
-	Error string `json:"error"`
-}
 
 func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -27,18 +24,18 @@ func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Something went wrong")
+			RespondWithError(w, http.StatusBadRequest, "Something went wrong")
 			return
 		}
 
 		if len(reqBody.Body) > 140 {
-			respondWithError(w, http.StatusBadRequest, "Chirp is too long")
+			RespondWithError(w, http.StatusBadRequest, "Chirp is too long")
 			return
 		}
 
 		cleanedBody := replaceProfaneWords(reqBody.Body, profaneWords)
 
-		respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
+		RespondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
 
 	}
 }

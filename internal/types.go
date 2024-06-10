@@ -1,4 +1,4 @@
-package main
+package internal
 
 type Chirp struct {
 	Id   int    `json:"id"`
