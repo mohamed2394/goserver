@@ -32,5 +32,5 @@ func setupRoutes(mux *http.ServeMux) {
 	mux.Handle("/api/healthz", &readinessHandler{})
 	mux.HandleFunc("/admin/metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("/api/reset", apiCfg.resetHandler)
-	mux.HandleFunc("/api/validate_chirp", ValidateChirpMiddleware(ValidateChirpHandler))
+	mux.HandleFunc("POST /api/chirps", ValidateChirpMiddleware(ValidateChirpHandler))
 }

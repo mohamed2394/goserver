@@ -16,16 +16,12 @@ type apiConfig struct {
 
 type readinessHandler struct{}
 
-type ChirpRequest struct {
-	Body string `json:"body"`
-}
 type ErrorResponse struct {
 	Error string `json:"error"`
 }
 
 func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// Decode JSON request body
 		var reqBody ChirpRequest
 		profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
 
@@ -35,19 +31,15 @@ func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		// Check chirp length
 		if len(reqBody.Body) > 140 {
 			respondWithError(w, http.StatusBadRequest, "Chirp is too long")
 			return
 		}
 
-		// Replace profane words
 		cleanedBody := replaceProfaneWords(reqBody.Body, profaneWords)
 
-		// Send the cleaned chirp body in the response
 		respondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
 
-		// No need to call the next handler since we're responding directly
 	}
 }
 
@@ -71,26 +63,14 @@ func replaceProfaneWords(text string, profaneWords []string) string {
 	// Reconstruct the text from words
 	return strings.Join(words, " ")
 }
-func respondWithError(w http.ResponseWriter, code int, msg string) {
-	errorResponse := ErrorResponse{Error: msg}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(errorResponse)
-}
 
-func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(payload)
-}
-
-// ValidateChirpHandler is the actual handler for /api/validate_chirp endpoint
+// handler for /api/validate_chirp endpoint
 func ValidateChirpHandler(w http.ResponseWriter, r *http.Request) {
 	// Respond with success message if validation passed
 
 }
 
-// Middleware to increment the fileserverHits counter
+// middleware to increment the fileserverHits counter
 func (cfg *apiConfig) middlewareMetricsInc(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		cfg.mu.Lock()
