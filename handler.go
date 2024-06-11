@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -18,6 +19,9 @@ type apiConfig struct {
 }
 
 type readinessHandler struct{}
+type userHandler struct {
+	db *DB
+}
 
 type chirpHandler struct {
 	db *DB
@@ -31,6 +35,38 @@ func (ch *chirpHandler) getChirpsHandler(w http.ResponseWriter, r *http.Request)
 	}
 
 	RespondWithJSON(w, http.StatusOK, chirps)
+}
+
+func (ch *chirpHandler) getChirpByIdHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the chirp ID from the URL
+	stringId := r.PathValue("CHIRPID")
+	id, err := strconv.Atoi(stringId)
+	if err != nil {
+		RespondWithError(w, http.StatusBadRequest, "Invalid chirp ID")
+		return
+	}
+
+	// Convert to zero-based index
+	zeroBasedID := id - 1
+
+	// Fetch all chirps from the database
+	chirps, err := ch.db.GetChirps()
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to load chirps from the database")
+		return
+	}
+
+	// Ensure the zero-based chirp ID is within the valid range
+	if zeroBasedID < 0 || zeroBasedID >= len(chirps) {
+		RespondWithError(w, http.StatusNotFound, "Chirp not found")
+		return
+	}
+
+	// Fetch the chirp
+	chirp := chirps[zeroBasedID]
+
+	// Respond with the chirp in JSON format
+	RespondWithJSON(w, http.StatusOK, chirp)
 }
 
 func (ch *chirpHandler) postChirpsHandler(w http.ResponseWriter, r *http.Request) {
@@ -119,4 +155,25 @@ func (rh *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("OK"))
+}
+
+func (uh *userHandler) postUserHandler(w http.ResponseWriter, r *http.Request) {
+	var reqBody UserRequest
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		log.Printf("Error decoding JSON: %v", err)
+		RespondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	user, err := uh.db.CreateUser(reqBody.Email)
+	if err != nil {
+		log.Printf("Failed to save chirp: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "Failed to save chirp")
+		return
+	}
+
+	log.Printf("Chirp created with ID: %d", user.Id)
+	RespondWithJSON(w, http.StatusCreated, user)
+
 }

@@ -59,12 +59,20 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 		db: db,
 	}
 
+	userH := userHandler{
+		db: db,
+	}
+
 	handler := http.FileServer(http.Dir(filepathRoot))
 	mux.Handle("/app/", http.StripPrefix("/app/", apiCfg.middlewareMetricsInc(handler)))
 
 	mux.Handle("/api/healthz", &readinessHandler{})
 	mux.HandleFunc("/admin/metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("/api/reset", apiCfg.resetHandler)
+	mux.HandleFunc("POST /api/users", userH.postUserHandler)
+
+	mux.HandleFunc("GET /api/chirps/{CHIRPID}", chirpH.getChirpByIdHandler)
+
 	mux.HandleFunc("/api/chirps", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
 		case http.MethodPost:
