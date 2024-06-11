@@ -3,11 +3,13 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
 
 	. "github.com/mohamed2394/goserver/internal"
+	. "github.com/mohamed2394/goserver/internal/database"
 )
 
 type apiConfig struct {
@@ -17,27 +19,51 @@ type apiConfig struct {
 
 type readinessHandler struct{}
 
-func ValidateChirpMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		var reqBody ChirpRequest
-		profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
+type chirpHandler struct {
+	db *DB
+}
 
-		err := json.NewDecoder(r.Body).Decode(&reqBody)
-		if err != nil {
-			RespondWithError(w, http.StatusBadRequest, "Something went wrong")
-			return
-		}
-
-		if len(reqBody.Body) > 140 {
-			RespondWithError(w, http.StatusBadRequest, "Chirp is too long")
-			return
-		}
-
-		cleanedBody := replaceProfaneWords(reqBody.Body, profaneWords)
-
-		RespondWithJSON(w, http.StatusOK, map[string]string{"cleaned_body": cleanedBody})
-
+func (ch *chirpHandler) getChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	chirps, err := ch.db.GetChirps()
+	if err != nil {
+		RespondWithError(w, http.StatusBadRequest, "Something went wrong")
+		return
 	}
+
+	RespondWithJSON(w, http.StatusOK, chirps)
+}
+
+func (ch *chirpHandler) postChirpsHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Received a POST request on /api/chirps")
+
+	var reqBody ChirpRequest
+	profaneWords := []string{"kerfuffle", "sharbert", "fornax"}
+
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		log.Printf("Error decoding JSON: %v", err)
+		RespondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	if len(reqBody.Body) > 140 {
+		log.Println("Chirp is too long")
+		RespondWithError(w, http.StatusBadRequest, "Chirp is too long")
+		return
+	}
+
+	cleanedBody := replaceProfaneWords(reqBody.Body, profaneWords)
+	log.Printf("Cleaned chirp body: %s", cleanedBody)
+
+	chirp, err := ch.db.CreateChirp(cleanedBody)
+	if err != nil {
+		log.Printf("Failed to save chirp: %v", err)
+		RespondWithError(w, http.StatusInternalServerError, "Failed to save chirp")
+		return
+	}
+
+	log.Printf("Chirp created with ID: %d", chirp.Id)
+	RespondWithJSON(w, http.StatusCreated, chirp)
 }
 
 // Function to replace profane words
@@ -59,12 +85,6 @@ func replaceProfaneWords(text string, profaneWords []string) string {
 
 	// Reconstruct the text from words
 	return strings.Join(words, " ")
-}
-
-// handler for /api/validate_chirp endpoint
-func ValidateChirpHandler(w http.ResponseWriter, r *http.Request) {
-	// Respond with success message if validation passed
-
 }
 
 // middleware to increment the fileserverHits counter
