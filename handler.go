@@ -157,7 +157,7 @@ func (rh *readinessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
 }
 
-func (uh *userHandler) postUserHandler(w http.ResponseWriter, r *http.Request) {
+func (uh *userHandler) createUserHandler(w http.ResponseWriter, r *http.Request) {
 	var reqBody UserRequest
 	err := json.NewDecoder(r.Body).Decode(&reqBody)
 	if err != nil {
@@ -166,14 +166,48 @@ func (uh *userHandler) postUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := uh.db.CreateUser(reqBody.Email)
+	// Create user
+	user, err := uh.db.CreateUser(reqBody.Email, reqBody.Password)
 	if err != nil {
-		log.Printf("Failed to save chirp: %v", err)
-		RespondWithError(w, http.StatusInternalServerError, "Failed to save chirp")
+		if err.Error() == "email already in use" {
+			RespondWithError(w, http.StatusConflict, "Email already in use")
+		} else {
+			log.Printf("Failed to create user: %v", err)
+			RespondWithError(w, http.StatusInternalServerError, "Failed to create user")
+		}
 		return
 	}
 
-	log.Printf("Chirp created with ID: %d", user.Id)
-	RespondWithJSON(w, http.StatusCreated, user)
+	log.Printf("User created with ID: %d", user.Id)
 
+	// Respond with user info, excluding password
+	response := struct {
+		Id    int    `json:"id"`
+		Email string `json:"email"`
+	}{
+		Id:    user.Id,
+		Email: user.Email,
+	}
+	RespondWithJSON(w, http.StatusCreated, response)
+}
+
+func (uh *userHandler) loginUserHandler(w http.ResponseWriter, r *http.Request) {
+	var reqBody UserRequest
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		log.Printf("Error decoding JSON: %v", err)
+		RespondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	user, errU := uh.db.GetUser(reqBody.Email, reqBody.Password)
+	if errU != nil {
+		RespondWithError(w, http.StatusUnauthorized, "Invalid email or password")
+		return
+	}
+
+	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"id":    user.Id,
+		"email": user.Email,
+	})
 }

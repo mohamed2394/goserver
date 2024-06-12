@@ -15,7 +15,7 @@ func main() {
 	const port = "8080"
 
 	// Set up database
-	dbPath := "C:\\Users\\GEEK\\Desktop\\goserver\\internal\\database\\database.json"
+	dbPath := "internal/database/database.json"
 	db, err := d.NewDB(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to set up database: %v\n", err)
@@ -69,7 +69,8 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 	mux.Handle("/api/healthz", &readinessHandler{})
 	mux.HandleFunc("/admin/metrics", apiCfg.metricsHandler)
 	mux.HandleFunc("/api/reset", apiCfg.resetHandler)
-	mux.HandleFunc("POST /api/users", userH.postUserHandler)
+	mux.HandleFunc("POST /api/users", userH.createUserHandler)
+	mux.HandleFunc("POST /api/login", userH.loginUserHandler)
 
 	mux.HandleFunc("GET /api/chirps/{CHIRPID}", chirpH.getChirpByIdHandler)
 

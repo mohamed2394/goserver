@@ -10,10 +10,13 @@ type ChirpRequest struct {
 }
 
 type User struct {
-	Id    int    `json:"id"`
-	Email string `json:"email"`
+	Id       int    `json:"id"`
+	Password string `json:"password"`
+	Email    string `json:"email"`
 }
 
 type UserRequest struct {
-	Email string `json:"email"`
+	Password         string `json:"password"`
+	Email            string `json:"email"`
+	ExpiresInSeconds int    `json:"expires_in_seconds"`
 }

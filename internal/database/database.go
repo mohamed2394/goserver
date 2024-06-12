@@ -3,6 +3,7 @@ package database
 import (
 	// Other imports...
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	. "github.com/mohamed2394/goserver/internal"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type DB struct {
@@ -73,33 +75,48 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 	return chirp, nil
 }
 
-func (db *DB) CreateUser(email string) (User, error) {
-	log.Println("Creating a new chirp")
+func (db *DB) CreateUser(email string, password string) (User, error) {
+	log.Println("Creating a new user")
 
+	// Check if email already exists
+	users, err := db.GetUsers()
+	if err != nil {
+		log.Println("Error getting users:", err)
+		return User{}, err
+	}
+	for _, user := range users {
+		if user.Email == email {
+			return User{}, errors.New("email already in use")
+		}
+	}
+
+	// Hash the password
+	hashPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Println("Error hashing password:", err)
+		return User{}, err
+	}
+
+	// Create new user
 	user := User{
-		Id:    db.UserIdCounter,
-		Email: email,
+		Id:       db.UserIdCounter,
+		Password: string(hashPassword),
+		Email:    email,
 	}
 	db.UserIdCounter++
-	log.Printf("Assigned chirp ID: %d", user.Id)
+	log.Printf("Assigned user ID: %d", user.Id)
 
-	users, errC := db.GetUsers()
-	if errC != nil {
-		log.Println("Error getting users:", errC)
-		return User{}, errC
-	}
-
+	// Append new user and update database
 	users = append(users, user)
-	chirps, errH := db.GetChirps()
-	if errH != nil {
-		log.Println("Error getting chirps:", errC)
-		return User{}, errC
+	chirps, err := db.GetChirps()
+	if err != nil {
+		log.Println("Error getting chirps:", err)
+		return User{}, err
 	}
-
-	errU := db.updateDB(users, chirps)
-	if errU != nil {
-		log.Println("Error writing database:", errU)
-		return User{}, errU
+	err = db.updateDB(users, chirps)
+	if err != nil {
+		log.Println("Error writing database:", err)
+		return User{}, err
 	}
 	log.Println("Successfully created a new user")
 	return user, nil
@@ -206,6 +223,33 @@ func (db *DB) GetUsers() ([]User, error) {
 	log.Println("Sorting ysers by ID")
 	sort.Slice(users, func(i, j int) bool { return users[i].Id < users[j].Id })
 	return users, nil
+}
+
+func (db *DB) GetUser(email, password string) (User, error) {
+	// Retrieve all users from the database
+	users, errC := db.GetUsers()
+	if errC != nil {
+		log.Println("Error getting users:", errC)
+		return User{}, errC
+	}
+
+	// Iterate through the users to find a match by email
+	for _, u := range users {
+		if u.Email == email {
+			// Compare the provided password with the stored hashed password
+			err := bcrypt.CompareHashAndPassword([]byte(u.Password), []byte(password))
+			if err != nil {
+				log.Println("Password does not match:", err)
+				return User{}, errors.New("invalid email or password")
+			}
+			// Return the user if the password matches
+			return u, nil
+		}
+	}
+
+	// Handle case where no user was found
+	log.Println("No user was found for this email")
+	return User{}, errors.New("no user was found for this email")
 }
 
 // ensureDB creates a new database file if it doesn't exist
