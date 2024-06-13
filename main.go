@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	e "github.com/mohamed2394/goserver/internal"
 	d "github.com/mohamed2394/goserver/internal/database"
 )
@@ -22,6 +23,7 @@ func main() {
 	}
 	defer os.Remove(dbPath) // Ensure the database file is deleted on exit
 
+	// by default, godotenv will look for a file named .env in the current directory
 	// Set up server and routes
 	mux := http.NewServeMux()
 	setupRoutes(mux, db)
@@ -50,9 +52,17 @@ func main() {
 	}
 }
 func setupRoutes(mux *http.ServeMux, db *d.DB) {
+	errV := godotenv.Load()
+	if errV != nil {
+		log.Fatal("Error loading .env file")
+	}
+
+	secretKey := os.Getenv("JWT_SECRET")
+
 	const filepathRoot = "."
 	apiCfg := &apiConfig{
 		fileserverHits: 0,
+		secretKey:      secretKey,
 	}
 
 	chirpH := chirpHandler{
@@ -60,7 +70,8 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 	}
 
 	userH := userHandler{
-		db: db,
+		db:     db,
+		apiCfg: apiCfg,
 	}
 
 	handler := http.FileServer(http.Dir(filepathRoot))

@@ -8,7 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
+	"github.com/golang-jwt/jwt"
 	. "github.com/mohamed2394/goserver/internal"
 	. "github.com/mohamed2394/goserver/internal/database"
 )
@@ -16,11 +18,13 @@ import (
 type apiConfig struct {
 	mu             sync.Mutex
 	fileserverHits int
+	secretKey      string
 }
 
 type readinessHandler struct{}
 type userHandler struct {
-	db *DB
+	db     *DB
+	apiCfg *apiConfig
 }
 
 type chirpHandler struct {
@@ -205,9 +209,22 @@ func (uh *userHandler) loginUserHandler(w http.ResponseWriter, r *http.Request) 
 		RespondWithError(w, http.StatusUnauthorized, "Invalid email or password")
 		return
 	}
-
+	claims := &jwt.MapClaims{
+		"iss": "chirpy",
+		"iat": time.Now().UTC().Unix(),
+		"exp": time.Now().UTC().Add(time.Duration(reqBody.ExpiresInSeconds) * time.Second).Unix(),
+		"sub": strconv.Itoa(user.Id),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, err := token.SignedString([]byte(uh.apiCfg.secretKey))
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Error generating token")
+		return
+	}
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
 		"id":    user.Id,
 		"email": user.Email,
+		"token": tokenString,
 	})
+
 }
