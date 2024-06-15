@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -212,7 +214,7 @@ func (uh *userHandler) loginUserHandler(w http.ResponseWriter, r *http.Request) 
 	claims := &jwt.MapClaims{
 		"iss": "chirpy",
 		"iat": time.Now().UTC().Unix(),
-		"exp": time.Now().UTC().Add(time.Duration(reqBody.ExpiresInSeconds) * time.Second).Unix(),
+		"exp": time.Now().UTC().Add(time.Hour).Unix(),
 		"sub": strconv.Itoa(user.Id),
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -221,10 +223,159 @@ func (uh *userHandler) loginUserHandler(w http.ResponseWriter, r *http.Request) 
 		RespondWithError(w, http.StatusInternalServerError, "Error generating token")
 		return
 	}
+
+	refresh := make([]byte, 32)
+	_, errR := rand.Read(refresh)
+
+	if errR != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Error generating refresh token")
+		return
+
+	}
+	refreshToken := hex.EncodeToString(refresh)
+
+	uh.db.UpdateUser(user.Id, user.Email, user.Password, refreshToken)
 	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
-		"id":    user.Id,
-		"email": user.Email,
-		"token": tokenString,
+		"id":            user.Id,
+		"email":         user.Email,
+		"token":         tokenString,
+		"refresh_token": refreshToken,
 	})
 
+}
+
+func (uh *userHandler) updateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var reqBody UpdateUserRequest
+	err := json.NewDecoder(r.Body).Decode(&reqBody)
+	if err != nil {
+		RespondWithError(w, http.StatusBadRequest, "Invalid JSON")
+		return
+	}
+
+	// Extract the token from the request headers
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		RespondWithError(w, http.StatusUnauthorized, "Authorization header missing or malformed")
+		return
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	// Parse the token
+	token, err := jwt.ParseWithClaims(tokenString, &jwt.MapClaims{}, func(token *jwt.Token) (interface{}, error) {
+		return []byte(uh.apiCfg.secretKey), nil
+	})
+	if err != nil || !token.Valid {
+		RespondWithError(w, http.StatusUnauthorized, "Invalid or expired token")
+		return
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(*jwt.MapClaims)
+	if !ok {
+		RespondWithError(w, http.StatusUnauthorized, "Invalid token claims")
+		return
+	}
+	userId, err := strconv.Atoi((*claims)["sub"].(string))
+	if err != nil {
+		RespondWithError(w, http.StatusUnauthorized, "Invalid user ID in token")
+		return
+	}
+
+	// Update user in the database
+	err = uh.db.UpdateUser(userId, reqBody.Email, reqBody.Password, "")
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Failed to update user")
+		return
+	}
+
+	// Respond with updated user info
+	RespondWithJSON(w, http.StatusOK, map[string]interface{}{
+		"id":    userId,
+		"email": reqBody.Email,
+	})
+}
+
+func (uh *userHandler) refreshToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		RespondWithError(w, http.StatusUnauthorized, "Authorization header missing or malformed")
+		return
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	users, errU := uh.db.GetUsers()
+	if errU != nil {
+		RespondWithError(w, http.StatusUnauthorized, errU.Error())
+		return
+
+	}
+	for _, user := range users {
+		if user.RefreshToken == tokenString && time.Now().Before(user.RefreshExpirationDate) {
+			claims := &jwt.MapClaims{
+				"iss": "chirpy",
+				"iat": time.Now().UTC().Unix(),
+				"exp": time.Now().UTC().Add(time.Hour).Unix(),
+				"sub": strconv.Itoa(user.Id),
+			}
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+			tokenString, err := token.SignedString([]byte(uh.apiCfg.secretKey))
+			if err != nil {
+				RespondWithError(w, http.StatusInternalServerError, "Error generating token")
+				return
+			}
+			RespondWithJSON(w, http.StatusOK, map[string]interface{}{
+				"token": tokenString,
+			})
+			break
+		} else {
+			RespondWithError(w, http.StatusUnauthorized, "Error generating token")
+			return
+
+		}
+	}
+
+}
+
+func (uh *userHandler) revokeToken(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		RespondWithError(w, http.StatusUnauthorized, "Authorization header missing or malformed")
+		return
+	}
+	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+
+	users, errU := uh.db.GetUsers()
+	if errU != nil {
+		RespondWithError(w, http.StatusUnauthorized, errU.Error())
+		return
+	}
+
+	chirps, errC := uh.db.GetChirps()
+	if errC != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Error fetching chirps")
+		return
+	}
+
+	userFound := false
+	for i := range users {
+		if users[i].RefreshToken == tokenString {
+			userFound = true
+			users[i].RefreshToken = ""
+			pastDate := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+			users[i].RefreshExpirationDate = pastDate
+		}
+	}
+
+	if !userFound {
+		RespondWithError(w, http.StatusUnauthorized, "NO user Found for this token")
+		return
+	}
+
+	err := uh.db.UpdateDB(users, chirps)
+	if err != nil {
+		RespondWithError(w, http.StatusInternalServerError, "Error updating database")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }

@@ -9,6 +9,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"time"
 
 	. "github.com/mohamed2394/goserver/internal"
 	"golang.org/x/crypto/bcrypt"
@@ -66,7 +67,7 @@ func (db *DB) CreateChirp(body string) (Chirp, error) {
 		return Chirp{}, errC
 	}
 
-	errU := db.updateDB(users, chirps)
+	errU := db.UpdateDB(users, chirps)
 	if errU != nil {
 		log.Println("Error writing database:", errU)
 		return Chirp{}, errU
@@ -113,7 +114,7 @@ func (db *DB) CreateUser(email string, password string) (User, error) {
 		log.Println("Error getting chirps:", err)
 		return User{}, err
 	}
-	err = db.updateDB(users, chirps)
+	err = db.UpdateDB(users, chirps)
 	if err != nil {
 		log.Println("Error writing database:", err)
 		return User{}, err
@@ -252,6 +253,46 @@ func (db *DB) GetUser(email, password string) (User, error) {
 	return User{}, errors.New("no user was found for this email")
 }
 
+func (db *DB) UpdateUser(id int, newEmail, newPassword, refresh_token string) error {
+
+	users, errU := db.GetUsers()
+	if errU != nil {
+		return errU
+	}
+	chirps, errC := db.GetChirps()
+	if errC != nil {
+		return errC
+	}
+
+	userUpdated := false
+	for i := range users {
+		if users[i].Id == id {
+			users[i].Email = newEmail
+
+			// Hash new password
+			hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+			if err != nil {
+				return err
+			}
+			users[i].Password = string(hashedPassword)
+			users[i].RefreshToken = refresh_token
+			refreshExpirationDate := time.Now().Add(60 * 24 * time.Hour) // 60 days from now
+			users[i].RefreshExpirationDate = refreshExpirationDate
+			userUpdated = true
+			break
+		}
+	}
+
+	if !userUpdated {
+		return fmt.Errorf("user with ID %d not found", id)
+	}
+
+	// Save updated users and chirps back to the database
+	db.UpdateDB(users, chirps)
+
+	return nil
+}
+
 // ensureDB creates a new database file if it doesn't exist
 func (db *DB) ensureDB() error {
 	log.Println("Checking if database file exists")
@@ -314,7 +355,7 @@ func (db *DB) writeDB(dbStructure DBStructure) error {
 	return nil
 }
 
-func (db *DB) updateDB(users []User, chirps []Chirp) error {
+func (db *DB) UpdateDB(users []User, chirps []Chirp) error {
 	dbs := DBStructure{
 		Users:  make(map[int]User),
 		Chirps: make(map[int]Chirp),

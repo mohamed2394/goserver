@@ -82,6 +82,9 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 	mux.HandleFunc("/api/reset", apiCfg.resetHandler)
 	mux.HandleFunc("POST /api/users", userH.createUserHandler)
 	mux.HandleFunc("POST /api/login", userH.loginUserHandler)
+	mux.HandleFunc("PUT /api/users", userH.updateUserHandler)
+	mux.HandleFunc("POST /api/refresh", userH.refreshToken)
+	mux.HandleFunc("POST /api/revoke", userH.revokeToken)
 
 	mux.HandleFunc("GET /api/chirps/{CHIRPID}", chirpH.getChirpByIdHandler)
 
