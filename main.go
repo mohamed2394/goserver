@@ -66,7 +66,8 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 	}
 
 	chirpH := chirpHandler{
-		db: db,
+		db:     db,
+		apiCfg: apiCfg,
 	}
 
 	userH := userHandler{
@@ -87,6 +88,8 @@ func setupRoutes(mux *http.ServeMux, db *d.DB) {
 	mux.HandleFunc("POST /api/revoke", userH.revokeToken)
 
 	mux.HandleFunc("GET /api/chirps/{CHIRPID}", chirpH.getChirpByIdHandler)
+
+	mux.HandleFunc("DELETE /api/chirps/{CHIRPID}", chirpH.deleteChirpHandler)
 
 	mux.HandleFunc("/api/chirps", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {

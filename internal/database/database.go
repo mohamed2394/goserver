@@ -175,6 +175,62 @@ func (db *DB) GetChirps() ([]Chirp, error) {
 	return chirps, nil
 }
 
+func (db *DB) GetChirp(id int) (Chirp, error) {
+	chirps, err := db.GetChirps()
+	if err != nil {
+		log.Println("Error happened when getting chirps", err)
+		return Chirp{}, err
+
+	}
+
+	for _, chirp := range chirps {
+		if chirp.Id == id {
+			return chirp, nil
+		}
+	}
+	return Chirp{}, errors.New("something happened")
+}
+
+func (db *DB) DeleteChirp(id int) error {
+	// Find the index of the chirp with the given ID
+	chirps, err := db.GetChirps()
+	if err != nil {
+		log.Println("Error happened when getting chirps", err)
+		return err
+
+	}
+	users, err := db.GetUsers()
+	if err != nil {
+		log.Println("Error happened when getting users", err)
+		return err
+
+	}
+
+	chirpIndex := -1
+	for i, chirp := range chirps {
+		if chirp.Id == id {
+			chirpIndex = i
+			break
+		}
+	}
+	if chirpIndex == -1 {
+		return fmt.Errorf("chirp with ID %d not found", id)
+	}
+
+	// Remove the chirp from the slice
+	chirps = append(chirps[:chirpIndex], chirps[chirpIndex+1:]...)
+
+	// Optionally, save the updated chirps back to the persistent storage if necessary
+	// This is dependent on your database implementation
+	errU := db.UpdateDB(users, chirps)
+	if errU != nil {
+		return fmt.Errorf("failed to update database: %v", err)
+	}
+
+	return nil
+
+}
+
 func (db *DB) GetUsers() ([]User, error) {
 	log.Println("Acquiring read lock for getting chirps")
 	db.Mux.RLock()
